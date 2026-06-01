@@ -1,82 +1,105 @@
 using UnityEngine;
 
-namespace Klak.Ndi {
-
-public sealed partial class NdiReceiver : MonoBehaviour
+namespace Klak.Ndi
 {
-    #region NDI source settings
 
-    [SerializeField] string _ndiName = null;
-    string _ndiNameRuntime;
+	public sealed partial class NdiReceiver : MonoBehaviour
+	{
+		public struct FrameMetadata
+		{
+			public Vector2Int size;
+			public float frameRate;
+			public long timestamp;
+		}
 
-    public string ndiName
-      { get => _ndiNameRuntime;
-        set => SetNdiName(value); }
+		#region NDI source settings
 
-    void SetNdiName(string name)
-    {
-        if (_ndiNameRuntime == name) return;
-        _ndiName = _ndiNameRuntime = name;
-        Restart();
-    }
+		[SerializeField] string _ndiName = null;
+		string _ndiNameRuntime;
 
-    #endregion
+		FrameMetadata frameData = new FrameMetadata();
 
-    #region Target settings
+		public string ndiName
+		{
+			get => _ndiNameRuntime;
+			set => SetNdiName(value);
+		}
 
-    [SerializeField] RenderTexture _targetTexture = null;
+		public FrameMetadata FrameData
+		{
+			get => frameData;
+		}
 
-    public RenderTexture targetTexture
-      { get => _targetTexture;
-        set => _targetTexture = value; }
+		void SetNdiName(string name)
+		{
+			if(_ndiNameRuntime == name) return;
+			_ndiName = _ndiNameRuntime = name;
+			Restart();
+		}
 
-    [SerializeField] Renderer _targetRenderer = null;
+		#endregion
 
-    public Renderer targetRenderer
-      { get => _targetRenderer;
-        set => _targetRenderer = value; }
+		#region Target settings
 
-    [SerializeField] string _targetMaterialProperty = null;
+		[SerializeField] RenderTexture _targetTexture = null;
 
-    public string targetMaterialProperty
-      { get => _targetMaterialProperty;
-        set => _targetMaterialProperty = value; }
+		public RenderTexture targetTexture
+		{
+			get => _targetTexture;
+			set => _targetTexture = value;
+		}
 
-    #endregion
+		[SerializeField] Renderer _targetRenderer = null;
 
-    #region Runtime property
+		public Renderer targetRenderer
+		{
+			get => _targetRenderer;
+			set => _targetRenderer = value;
+		}
 
-    public RenderTexture texture => _converter?.LastDecoderOutput;
+		[SerializeField] string _targetMaterialProperty = null;
 
-    public string metadata { get; set; }
+		public string targetMaterialProperty
+		{
+			get => _targetMaterialProperty;
+			set => _targetMaterialProperty = value;
+		}
 
-    public Interop.Recv internalRecvObject => _recv;
+		#endregion
 
-    #endregion
+		#region Runtime property
 
-    #region Resources asset reference
+		public RenderTexture texture => _converter?.LastDecoderOutput;
 
-    [SerializeField, HideInInspector] NdiResources _resources = null;
+		public string metadata { get; set; }
 
-    public void SetResources(NdiResources resources)
-      => _resources = resources;
+		public Interop.Recv internalRecvObject => _recv;
 
-    #endregion
+		#endregion
 
-    #region Editor change validation
+		#region Resources asset reference
 
-    // Applies changes on the serialized fields to the runtime properties.
-    // We use OnValidate on Editor, which also works as an initializer.
-    // Player never call it, so we use Awake instead of it.
+		[SerializeField, HideInInspector] NdiResources _resources = null;
 
-    #if UNITY_EDITOR
-    void OnValidate()
-    #else
+		public void SetResources(NdiResources resources)
+		  => _resources = resources;
+
+		#endregion
+
+		#region Editor change validation
+
+		// Applies changes on the serialized fields to the runtime properties.
+		// We use OnValidate on Editor, which also works as an initializer.
+		// Player never call it, so we use Awake instead of it.
+
+#if UNITY_EDITOR
+		void OnValidate()
+#else
     void Awake()
-    #endif
-      => ndiName = _ndiName;
+#endif
+		  => ndiName = _ndiName;
 
-    #endregion
-}
+		#endregion
+	}
 
 } // namespace Klak.Ndi

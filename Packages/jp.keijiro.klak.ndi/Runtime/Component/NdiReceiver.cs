@@ -56,8 +56,13 @@ public sealed partial class NdiReceiver : MonoBehaviour
         else
             metadata = null;
 
-        // Video frame release
-        _recv.FreeVideoFrame(frame);
+		// Update frame data
+		frameData.size = new Vector2Int(frame.Width, frame.Height);
+        frameData.frameRate = (float)frame.FrameRateN / (float)frame.FrameRateD;
+        frameData.timestamp = frame.Timestamp;
+
+		// Video frame release
+		_recv.FreeVideoFrame(frame);
 
         return rt;
     }
