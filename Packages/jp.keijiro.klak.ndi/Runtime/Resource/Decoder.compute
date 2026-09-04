@@ -10,6 +10,19 @@
 StructuredBuffer<uint> Source;
 RWTexture2D<float4> Destination;
 
+// Source frame geometry
+//
+// The source buffer is addressed as an array of uints, so the strides are
+// given by the host instead of being derived from the destination size: NDI
+// senders are free to pad the lines, and the frame width isn't necessarily a
+// multiple of the thread group size.
+//
+uint FrameWidth;   // Destination width (pixels)
+uint FrameHeight;  // Destination height (pixels)
+uint LineStride;   // UYVY plane line stride (uint elements)
+uint AlphaOffset;  // Alpha plane origin (bytes)
+uint AlphaStride;  // Alpha plane line stride (bytes)
+
 // sRGB to linear conversion
 float4 sRGB_to_Linear(float4 c)
 {
@@ -45,46 +58,58 @@ float4 UnpackUYVY(uint v)
     return f;
 }
 
-// Packed alpha conversion
-float4 UnpackAAAA(uint v)
+// Single byte fetch from the source buffer
+//
+// The alpha plane is only byte-aligned (its stride is half the UYVY one), so
+// it can't be addressed at the uint granularity.
+//
+float LoadByte(uint offs)
 {
-    return (uint4(v, v >> 8, v >> 16, v >> 24) & 0xff) / 255.0;
+    return ((Source[offs >> 2] >> ((offs & 3) * 8)) & 0xff) / 255.0;
 }
 
-// UYVY decoder function
+// UYVY decoder function (returns a horizontal pixel pair)
 float2x4 DecodeUYVY(uint2 id)
 {
-    uint w, h;
-    Destination.GetDimensions(w, h);
-
-    uint id_y = h - 1 - id.y;
-
-    uint sp = id_y * w / 2 + id.x;
-    float4 uyvy = UnpackUYVY(Source[sp]);
+    uint sy = FrameHeight - 1 - id.y;
+    float4 uyvy = UnpackUYVY(Source[sy * LineStride + id.x]);
 
     return float2x4(float4(YUV2RGB(uyvy.yxz), 1),
                     float4(YUV2RGB(uyvy.wxz), 1));
 }
 
-// UYVA decoder function
-float4x4 DecodeUYVA(uint2 id)
+// UYVA decoder function (returns a horizontal pixel pair)
+float2x4 DecodeUYVA(uint2 id)
 {
-    uint w, h;
-    Destination.GetDimensions(w, h);
+    uint sy = FrameHeight - 1 - id.y;
+    float4 uyvy = UnpackUYVY(Source[sy * LineStride + id.x]);
 
-    uint id_y = h - 1 - id.y;
+    uint ap = AlphaOffset + sy * AlphaStride + id.x * 2;
 
-    uint sp1 = id_y * w / 2 + id.x * 2;
-    float4 uyvy01 = UnpackUYVY(Source[sp1 + 0]);
-    float4 uyvy23 = UnpackUYVY(Source[sp1 + 1]);
+    return float2x4(float4(YUV2RGB(uyvy.yxz), LoadByte(ap + 0)),
+                    float4(YUV2RGB(uyvy.wxz), LoadByte(ap + 1)));
+}
 
-    uint sp2 = id_y * w / 4 + id.x + w * h / 2;
-    float4 a0123 = UnpackAAAA(Source[sp2]);
+// Pixel pair store
+//
+// The second pixel is guarded for the odd-width case, where the last pair only
+// carries a single visible pixel.
+//
+void StorePair(uint2 id, float4 c0, float4 c1)
+{
+    uint2 dp = uint2(id.x * 2, id.y);
+    Destination[dp] = c0;
+    if (dp.x + 1 < FrameWidth) Destination[dp + uint2(1, 0)] = c1;
+}
 
-    return float4x4(float4(YUV2RGB(uyvy01.yxz), a0123.x),
-                    float4(YUV2RGB(uyvy01.wxz), a0123.y),
-                    float4(YUV2RGB(uyvy23.yxz), a0123.z),
-                    float4(YUV2RGB(uyvy23.wxz), a0123.w));
+// Out-of-frame thread test
+//
+// The dispatch size is rounded up, so the trailing groups may run past the
+// frame edges.
+//
+bool IsOutOfFrame(uint2 id)
+{
+    return id.x * 2 >= FrameWidth || id.y >= FrameHeight;
 }
 
 // Decoder kernel entry points
@@ -92,39 +117,31 @@ float4x4 DecodeUYVA(uint2 id)
 [numthreads(8, 8, 1)]
 void DecodeUYVY_sRGB(uint2 id : SV_DispatchThreadID)
 {
+    if (IsOutOfFrame(id)) return;
     float2x4 d = DecodeUYVY(id);
-    uint2 dp = id * uint2(2, 1);
-    Destination[dp + uint2(0, 0)] = d[0];
-    Destination[dp + uint2(1, 0)] = d[1];
+    StorePair(id, d[0], d[1]);
 }
 
 [numthreads(8, 8, 1)]
 void DecodeUYVY_Linear(uint2 id : SV_DispatchThreadID)
 {
+    if (IsOutOfFrame(id)) return;
     float2x4 d = DecodeUYVY(id);
-    uint2 dp = id * uint2(2, 1);
-    Destination[dp + uint2(0, 0)] = sRGB_to_Linear(d[0]);
-    Destination[dp + uint2(1, 0)] = sRGB_to_Linear(d[1]);
+    StorePair(id, sRGB_to_Linear(d[0]), sRGB_to_Linear(d[1]));
 }
 
-[numthreads(4, 8, 1)]
+[numthreads(8, 8, 1)]
 void DecodeUYVA_sRGB(uint2 id : SV_DispatchThreadID)
 {
-    float4x4 d = DecodeUYVA(id);
-    uint2 dp = id * uint2(4, 1);
-    Destination[dp + uint2(0, 0)] = d[0];
-    Destination[dp + uint2(1, 0)] = d[1];
-    Destination[dp + uint2(2, 0)] = d[2];
-    Destination[dp + uint2(3, 0)] = d[3];
+    if (IsOutOfFrame(id)) return;
+    float2x4 d = DecodeUYVA(id);
+    StorePair(id, d[0], d[1]);
 }
 
-[numthreads(4, 8, 1)]
+[numthreads(8, 8, 1)]
 void DecodeUYVA_Linear(uint2 id : SV_DispatchThreadID)
 {
-    float4x4 d = DecodeUYVA(id);
-    uint2 dp = id * uint2(4, 1);
-    Destination[dp + uint2(0, 0)] = sRGB_to_Linear(d[0]);
-    Destination[dp + uint2(1, 0)] = sRGB_to_Linear(d[1]);
-    Destination[dp + uint2(2, 0)] = sRGB_to_Linear(d[2]);
-    Destination[dp + uint2(3, 0)] = sRGB_to_Linear(d[3]);
+    if (IsOutOfFrame(id)) return;
+    float2x4 d = DecodeUYVA(id);
+    StorePair(id, sRGB_to_Linear(d[0]), sRGB_to_Linear(d[1]));
 }

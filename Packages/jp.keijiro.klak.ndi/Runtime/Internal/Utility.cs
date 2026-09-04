@@ -10,7 +10,19 @@ namespace Klak.Ndi {
 static class Util
 {
     public static int FrameDataSize(int width, int height, bool alpha)
-      => width * height * (alpha ? 3 : 2);
+    {
+        // UYVY plane (two bytes per pixel), followed by the alpha plane (one
+        // byte per pixel) rounded up to the uint granularity the encoder
+        // writes with. The rounding is a no-op unless the pixel count is not a
+        // multiple of 4.
+        var size = width * height * 2;
+        if (alpha) size += ((width * height + 3) / 4) * 4;
+        return size;
+    }
+
+    // 4:2:2 chroma subsampling transmits pixels in horizontal pairs, so an odd
+    // width can't be represented. Sent frames are trimmed to the pair below.
+    public static int AlignWidth(int width) => width & ~1;
 
     public static bool HasAlpha(Interop.FourCC fourCC)
       => fourCC == Interop.FourCC.UYVA;

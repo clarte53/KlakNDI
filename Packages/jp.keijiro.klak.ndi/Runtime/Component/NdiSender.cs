@@ -78,10 +78,11 @@ public sealed partial class NdiSender : MonoBehaviour
             // Texture capture method
             if (captureMethod == CaptureMethod.Texture && sourceTexture != null)
             {
-                var (w, h) = (sourceTexture.width, sourceTexture.height);
+                var (w, h) =
+                  (Util.AlignWidth(sourceTexture.width), sourceTexture.height);
 
                 // Pixel format conversion
-                var buffer = _converter.Encode(sourceTexture, keepAlpha, true);
+                var buffer = _converter.Encode(sourceTexture, w, h, keepAlpha, true);
 
                 // Readback entry allocation and request
                 _pool.NewEntry(w, h, keepAlpha, metadata)
@@ -92,12 +93,13 @@ public sealed partial class NdiSender : MonoBehaviour
             if (captureMethod == CaptureMethod.GameView)
             {
                 // Game View screen capture with a temporary RT
-                var (w, h) = (Screen.width, Screen.height);
-                var tempRT = RenderTexture.GetTemporary(w, h, 0);
+                var tempRT =
+                  RenderTexture.GetTemporary(Screen.width, Screen.height, 0);
                 ScreenCapture.CaptureScreenshotIntoRenderTexture(tempRT);
 
                 // Pixel format conversion
-                var buffer = _converter.Encode(tempRT, keepAlpha, false);
+                var (w, h) = (Util.AlignWidth(Screen.width), Screen.height);
+                var buffer = _converter.Encode(tempRT, w, h, keepAlpha, false);
                 RenderTexture.ReleaseTemporary(tempRT);
 
                 // Readback entry allocation and request
@@ -120,7 +122,8 @@ public sealed partial class NdiSender : MonoBehaviour
         PrepareSenderObjects();
 
         // Pixel format conversion
-        var (w, h) = (sourceCamera.pixelWidth, sourceCamera.pixelHeight);
+        var (w, h) =
+          (Util.AlignWidth(sourceCamera.pixelWidth), sourceCamera.pixelHeight);
         var buffer = _converter.Encode(cb, source, w, h, keepAlpha, true);
 
         // Readback entry allocation and request

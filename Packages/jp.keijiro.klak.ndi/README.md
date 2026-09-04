@@ -49,8 +49,11 @@ Please review it before using the package in your project.
 Known Issues and Limitations
 ----------------------------
 
-- Dimensions of frame images should be multiples of 16x8. This limitation causes
-  glitches on several mobile devices when using the Game View capture method.
+- Frame images must have an even width, as imposed by the 4:2:2 chroma
+  subsampling of the NDI wire formats. There is no constraint on the height.
+  A sent frame whose source width is odd is trimmed by one column.
+  (Earlier releases required multiples of 16x8, which was the cause of the
+  Game View capture glitches reported on several mobile devices.)
 
 - KlakNDI doesn't support audio streaming. There are several technical
   difficulties to implement without perceptible noise or delay, so there are no

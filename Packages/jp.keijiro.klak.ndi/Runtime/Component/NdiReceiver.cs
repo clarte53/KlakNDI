@@ -48,7 +48,8 @@ public sealed partial class NdiReceiver : MonoBehaviour
 
         // Pixel format conversion
         var rt = _converter.Decode
-          (frame.Width, frame.Height, Util.HasAlpha(frame.FourCC), frame.Data);
+          (frame.Width, frame.Height, Util.HasAlpha(frame.FourCC),
+           frame.LineStride, frame.Data);
 
         // Metadata retrieval
         if (frame.Metadata != IntPtr.Zero)

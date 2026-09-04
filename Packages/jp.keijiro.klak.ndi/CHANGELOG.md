@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Removed the 16x8 frame size requirement on both the sender and the receiver
+  side. Frames of arbitrary dimensions (any even width) are now converted
+  without clipping the right and bottom edges. Odd source widths are trimmed by
+  one column on send.
+- The receiver now honors the line stride reported by the sender instead of
+  assuming tightly packed lines.
+- The sender now converts the requested frame size instead of the whole source
+  texture, which fixes the output when a SRP hands over a render target larger
+  than the camera viewport.
+
 ## [2.1.6] - 2025-12-07
 
 ### Fixed
